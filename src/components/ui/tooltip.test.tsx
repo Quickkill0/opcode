@@ -89,7 +89,8 @@ describe('Tooltip Components', () => {
     await user.hover(screen.getByText(/hover/i));
 
     await waitFor(() => {
-      expect(screen.getByText(/content/i)).toHaveClass('custom-class');
+      const content = screen.getAllByText(/content/i)[0];
+      expect(content).toHaveClass('custom-class');
     });
   });
 });

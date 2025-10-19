@@ -6,16 +6,19 @@ import { FilePicker } from './FilePicker';
 // Mock API
 vi.mock('@/lib/api', () => ({
   api: {
-    listDirectoryContents: vi.fn().mockResolvedValue([
-      { name: 'folder1', path: 'C:\\test\\folder1', is_directory: true, size: 0, modified: '' },
-      { name: 'file1.txt', path: 'C:\\test\\file1.txt', is_directory: false, size: 1024, modified: '' },
-    ]),
+    listDirectoryContents: vi.fn(),
   },
 }));
+
+import { api } from '@/lib/api';
 
 describe('FilePicker Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(api.listDirectoryContents).mockResolvedValue([
+      { name: 'folder1', path: 'C:\\test\\folder1', is_directory: true, size: 0, modified: '' },
+      { name: 'file1.txt', path: 'C:\\test\\file1.txt', is_directory: false, size: 1024, modified: '' },
+    ]);
   });
 
   it('renders file picker with base path', async () => {
