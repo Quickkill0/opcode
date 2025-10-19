@@ -143,6 +143,27 @@ fn get_claude_dir() -> Result<PathBuf> {
         .context("Could not find ~/.claude directory")
 }
 
+/// Gets the path to the permission hook script
+fn get_permission_hook_path(app_handle: &AppHandle) -> Result<String, String> {
+    // Try to get the resource directory
+    let resource_dir = app_handle
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to get resource directory: {}", e))?;
+
+    let hook_path = resource_dir.join("permission-proxy.py");
+
+    // Check if the file exists
+    if !hook_path.exists() {
+        return Err(format!("Permission hook script not found at: {}", hook_path.display()));
+    }
+
+    hook_path
+        .to_str()
+        .ok_or_else(|| "Invalid permission hook path".to_string())
+        .map(|s| s.to_string())
+}
+
 /// Gets the actual project path by reading the cwd from the JSONL entries
 fn get_project_path_from_sessions(project_dir: &PathBuf) -> Result<String, String> {
     // Try to read any JSONL file in the directory
@@ -931,8 +952,12 @@ pub async fn execute_claude_code(
     );
 
     let claude_path = find_claude_binary(&app)?;
+    let hook_path = get_permission_hook_path(&app)?;
 
-    let args = vec![
+    // Generate hook settings JSON for --settings flag
+    let settings_json = crate::permission_storage::PermissionStorage::generate_hook_settings(&hook_path, 8765)?;
+
+    let mut args = vec![
         "-p".to_string(),
         prompt.clone(),
         "--model".to_string(),
@@ -940,7 +965,8 @@ pub async fn execute_claude_code(
         "--output-format".to_string(),
         "stream-json".to_string(),
         "--verbose".to_string(),
-        "--dangerously-skip-permissions".to_string(),
+        "--settings".to_string(),
+        settings_json,
     ];
 
     let cmd = create_system_command(&claude_path, args, &project_path);
@@ -962,6 +988,10 @@ pub async fn continue_claude_code(
     );
 
     let claude_path = find_claude_binary(&app)?;
+    let hook_path = get_permission_hook_path(&app)?;
+
+    // Generate hook settings JSON for --settings flag
+    let settings_json = crate::permission_storage::PermissionStorage::generate_hook_settings(&hook_path, 8765)?;
 
     let args = vec![
         "-c".to_string(), // Continue flag
@@ -972,7 +1002,8 @@ pub async fn continue_claude_code(
         "--output-format".to_string(),
         "stream-json".to_string(),
         "--verbose".to_string(),
-        "--dangerously-skip-permissions".to_string(),
+        "--settings".to_string(),
+        settings_json,
     ];
 
     let cmd = create_system_command(&claude_path, args, &project_path);
@@ -996,6 +1027,10 @@ pub async fn resume_claude_code(
     );
 
     let claude_path = find_claude_binary(&app)?;
+    let hook_path = get_permission_hook_path(&app)?;
+
+    // Generate hook settings JSON for --settings flag
+    let settings_json = crate::permission_storage::PermissionStorage::generate_hook_settings(&hook_path, 8765)?;
 
     let args = vec![
         "--resume".to_string(),
@@ -1007,7 +1042,8 @@ pub async fn resume_claude_code(
         "--output-format".to_string(),
         "stream-json".to_string(),
         "--verbose".to_string(),
-        "--dangerously-skip-permissions".to_string(),
+        "--settings".to_string(),
+        settings_json,
     ];
 
     let cmd = create_system_command(&claude_path, args, &project_path);
