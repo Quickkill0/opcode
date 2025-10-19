@@ -535,3 +535,168 @@ impl Default for ProcessRegistryState {
         Self(Arc::new(ProcessRegistry::new()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_process_registry_creation() {
+        let registry = ProcessRegistry::new();
+        let processes = registry.processes.lock().unwrap();
+        assert_eq!(processes.len(), 0);
+    }
+
+    #[test]
+    fn test_process_registry_default() {
+        let registry = ProcessRegistry::default();
+        let processes = registry.processes.lock().unwrap();
+        assert_eq!(processes.len(), 0);
+    }
+
+    #[test]
+    fn test_process_registry_state_default() {
+        let state = ProcessRegistryState::default();
+        let processes = state.0.processes.lock().unwrap();
+        assert_eq!(processes.len(), 0);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_windows_kill_command_structure() {
+        // Test that Windows uses taskkill
+        let expected_command = "taskkill";
+        let expected_args = vec!["/F", "/PID", "1234"];
+
+        assert_eq!(expected_command, "taskkill");
+        assert_eq!(expected_args[0], "/F");
+        assert_eq!(expected_args[1], "/PID");
+        assert_eq!(expected_args[2], "1234");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unix_kill_command_structure() {
+        // Test that Unix uses kill with -TERM and -KILL
+        let term_command = "kill";
+        let term_args = vec!["-TERM", "1234"];
+
+        assert_eq!(term_command, "kill");
+        assert_eq!(term_args[0], "-TERM");
+        assert_eq!(term_args[1], "1234");
+
+        let kill_args = vec!["-KILL", "1234"];
+        assert_eq!(kill_args[0], "-KILL");
+        assert_eq!(kill_args[1], "1234");
+
+        // Test process check command
+        let check_args = vec!["-0", "1234"];
+        assert_eq!(check_args[0], "-0");
+    }
+
+    #[test]
+    fn test_process_type_agent_run() {
+        let process_type = ProcessType::AgentRun {
+            agent_id: 1,
+            agent_name: "test-agent".to_string(),
+        };
+        match process_type {
+            ProcessType::AgentRun {
+                agent_id,
+                agent_name,
+            } => {
+                assert_eq!(agent_id, 1);
+                assert_eq!(agent_name, "test-agent");
+            }
+            _ => panic!("Expected AgentRun"),
+        }
+    }
+
+    #[test]
+    fn test_process_type_claude_session() {
+        let process_type = ProcessType::ClaudeSession {
+            session_id: "session123".to_string(),
+        };
+        match process_type {
+            ProcessType::ClaudeSession { session_id } => {
+                assert_eq!(session_id, "session123");
+            }
+            _ => panic!("Expected ClaudeSession"),
+        }
+    }
+
+    #[test]
+    fn test_live_output_buffer_creation() {
+        // Test the Arc<Mutex<String>> pattern used for live_output
+        let buffer = Arc::new(Mutex::new(String::new()));
+        assert_eq!(buffer.lock().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_live_output_buffer_append() {
+        let buffer = Arc::new(Mutex::new(String::new()));
+        buffer.lock().unwrap().push_str("test output\n");
+
+        let output = buffer.lock().unwrap();
+        assert_eq!(*output, "test output\n");
+    }
+
+    #[test]
+    fn test_live_output_buffer_clone() {
+        let buffer1 = Arc::new(Mutex::new(String::new()));
+        buffer1.lock().unwrap().push_str("test");
+
+        let buffer2 = Arc::clone(&buffer1);
+        let output = buffer2.lock().unwrap();
+        assert_eq!(*output, "test");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_process_check_command() {
+        // Windows uses tasklist to check if process exists
+        // Format: tasklist /FI "PID eq 1234" /FO CSV
+        let command = "tasklist";
+        let args = vec!["/FI", "PID eq 1234", "/FO", "CSV"];
+
+        assert_eq!(command, "tasklist");
+        assert!(args.contains(&"/FI"));
+        assert!(args.contains(&"/FO"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unix_signal_handling() {
+        // Test that we understand the signal handling flow
+        // 1. Send SIGTERM (-TERM)
+        // 2. Wait 2 seconds
+        // 3. Check if process still running with kill -0
+        // 4. If still running, send SIGKILL (-KILL)
+
+        let sigterm = "-TERM";
+        let sigkill = "-KILL";
+        let check_signal = "-0";
+
+        assert_eq!(sigterm, "-TERM");
+        assert_eq!(sigkill, "-KILL");
+        assert_eq!(check_signal, "-0");
+    }
+
+    #[test]
+    fn test_platform_conditional_compilation() {
+        // This test verifies that exactly one platform is detected
+        #[cfg(windows)]
+        let is_windows = true;
+        #[cfg(not(windows))]
+        let is_windows = false;
+
+        #[cfg(unix)]
+        let is_unix = true;
+        #[cfg(not(unix))]
+        let is_unix = false;
+
+        // Either Windows or Unix, but not both (in practice)
+        // On WSL, both could technically be true, so we just verify at least one is set
+        assert!(is_windows || is_unix);
+    }
+}

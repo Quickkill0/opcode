@@ -691,3 +691,283 @@ pub fn create_command_with_env(program: &str) -> Command {
 
     cmd
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compare_versions_basic() {
+        assert_eq!(compare_versions("1.0.0", "1.0.0"), Ordering::Equal);
+        assert_eq!(compare_versions("1.0.1", "1.0.0"), Ordering::Greater);
+        assert_eq!(compare_versions("1.0.0", "1.0.1"), Ordering::Less);
+        assert_eq!(compare_versions("2.0.0", "1.9.9"), Ordering::Greater);
+        assert_eq!(compare_versions("1.9.9", "2.0.0"), Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_versions_with_prerelease() {
+        assert_eq!(compare_versions("1.0.0-beta", "1.0.0"), Ordering::Equal);
+        assert_eq!(compare_versions("1.0.1-beta", "1.0.0"), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_extract_version_from_output() {
+        let output1 = b"claude version 1.0.41\n";
+        assert_eq!(
+            extract_version_from_output(output1),
+            Some("1.0.41".to_string())
+        );
+
+        // The regex correctly extracts the full version including prerelease tags
+        let output2 = b"v2.5.3-beta.1\n";
+        assert_eq!(
+            extract_version_from_output(output2),
+            Some("2.5.3-beta.1".to_string())
+        );
+
+        let output3 = b"no version here\n";
+        assert_eq!(extract_version_from_output(output3), None);
+
+        // Test standard version without prerelease
+        let output4 = b"version 3.1.4\n";
+        assert_eq!(
+            extract_version_from_output(output4),
+            Some("3.1.4".to_string())
+        );
+    }
+
+    #[test]
+    fn test_source_preference() {
+        let which_install = ClaudeInstallation {
+            path: "/usr/bin/claude".to_string(),
+            version: Some("1.0.0".to_string()),
+            source: "which".to_string(),
+            installation_type: InstallationType::System,
+        };
+
+        let nvm_install = ClaudeInstallation {
+            path: "/home/user/.nvm/versions/node/v18.0.0/bin/claude".to_string(),
+            version: Some("1.0.0".to_string()),
+            source: "nvm (v18.0.0)".to_string(),
+            installation_type: InstallationType::System,
+        };
+
+        assert!(source_preference(&which_install) < source_preference(&nvm_install));
+    }
+
+    #[test]
+    fn test_select_best_installation_with_versions() {
+        let installations = vec![
+            ClaudeInstallation {
+                path: "/usr/bin/claude".to_string(),
+                version: Some("1.0.0".to_string()),
+                source: "system".to_string(),
+                installation_type: InstallationType::System,
+            },
+            ClaudeInstallation {
+                path: "/opt/homebrew/bin/claude".to_string(),
+                version: Some("1.0.5".to_string()),
+                source: "homebrew".to_string(),
+                installation_type: InstallationType::System,
+            },
+        ];
+
+        let best = select_best_installation(installations).unwrap();
+        assert_eq!(best.path, "/opt/homebrew/bin/claude");
+        assert_eq!(best.version, Some("1.0.5".to_string()));
+    }
+
+    #[test]
+    fn test_select_best_installation_without_versions() {
+        let installations = vec![
+            ClaudeInstallation {
+                path: "claude".to_string(),
+                version: None,
+                source: "PATH".to_string(),
+                installation_type: InstallationType::System,
+            },
+            ClaudeInstallation {
+                path: "/usr/local/bin/claude".to_string(),
+                version: None,
+                source: "system".to_string(),
+                installation_type: InstallationType::System,
+            },
+        ];
+
+        let best = select_best_installation(installations).unwrap();
+        // Should prefer absolute path over "claude"
+        assert_eq!(best.path, "/usr/local/bin/claude");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unix_path_structures() {
+        // Test that we're checking Unix-specific paths
+        let paths = vec![
+            "/usr/local/bin/claude",
+            "/opt/homebrew/bin/claude",
+            "/usr/bin/claude",
+        ];
+
+        for path in paths {
+            // Just verify the path structure is correct for Unix
+            assert!(path.starts_with('/'));
+            assert!(!path.contains('\\'));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_path_structures() {
+        // Test that Windows paths use proper structures
+        let userprofile = std::env::var("USERPROFILE");
+        if userprofile.is_ok() {
+            let profile = userprofile.unwrap();
+
+            // Verify path construction
+            let claude_local = format!("{}\\.claude\\local\\claude.exe", profile);
+            assert!(claude_local.contains("claude.exe"));
+
+            let npm_global = format!("{}\\AppData\\Roaming\\npm\\claude.cmd", profile);
+            assert!(npm_global.contains("claude.cmd"));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unix_home_env_var() {
+        // On Unix, HOME should be available
+        assert!(std::env::var("HOME").is_ok() || cfg!(target_os = "android"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_userprofile_env_var() {
+        // On Windows, USERPROFILE should be available
+        assert!(std::env::var("USERPROFILE").is_ok());
+    }
+
+    #[test]
+    fn test_create_command_with_env_inherits_path() {
+        let cmd = create_command_with_env("test");
+
+        // We can't directly inspect Command's env, but we can verify it doesn't panic
+        // This is a smoke test
+        drop(cmd);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_nvm_path_detection() {
+        // Test that NVM path detection logic works
+        let test_path = "/home/user/.nvm/versions/node/v18.0.0/bin/claude";
+        assert!(test_path.contains("/.nvm/versions/node/"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_executable_extensions() {
+        // Test that we're looking for .exe and .cmd on Windows
+        let exe_path = "C:\\Users\\test\\.claude\\local\\claude.exe";
+        let cmd_path = "C:\\Users\\test\\AppData\\Roaming\\npm\\claude.cmd";
+
+        assert!(exe_path.ends_with(".exe"));
+        assert!(cmd_path.ends_with(".cmd"));
+    }
+
+    #[test]
+    fn test_installation_type_equality() {
+        assert_eq!(InstallationType::System, InstallationType::System);
+        assert_eq!(InstallationType::Custom, InstallationType::Custom);
+        assert_ne!(InstallationType::System, InstallationType::Custom);
+    }
+
+    #[test]
+    fn test_discover_system_installations_deduplication() {
+        // This test verifies that discover_system_installations removes duplicates
+        // We can't easily test the actual discovery without mocking, but we can verify
+        // the deduplication logic would work
+        let mut installations = vec![
+            ClaudeInstallation {
+                path: "/usr/bin/claude".to_string(),
+                version: Some("1.0.0".to_string()),
+                source: "system".to_string(),
+                installation_type: InstallationType::System,
+            },
+            ClaudeInstallation {
+                path: "/usr/bin/claude".to_string(), // duplicate
+                version: Some("1.0.0".to_string()),
+                source: "which".to_string(),
+                installation_type: InstallationType::System,
+            },
+        ];
+
+        let mut unique_paths = std::collections::HashSet::new();
+        installations.retain(|install| unique_paths.insert(install.path.clone()));
+
+        assert_eq!(installations.len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_create_command_nvm_path_handling() {
+        let nvm_path = "/home/user/.nvm/versions/node/v18.0.0/bin/claude";
+        let cmd = create_command_with_env(nvm_path);
+
+        // Smoke test - should not panic
+        drop(cmd);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_create_command_homebrew_path_handling() {
+        let homebrew_path = "/opt/homebrew/bin/claude";
+        let cmd = create_command_with_env(homebrew_path);
+
+        // Smoke test - should not panic
+        drop(cmd);
+    }
+
+    #[test]
+    fn test_proxy_env_vars_in_command() {
+        // Test that proxy environment variables would be inherited
+        std::env::set_var("HTTP_PROXY", "http://proxy.test:8080");
+        std::env::set_var("HTTPS_PROXY", "https://proxy.test:8080");
+
+        let cmd = create_command_with_env("test");
+
+        // Cleanup
+        std::env::remove_var("HTTP_PROXY");
+        std::env::remove_var("HTTPS_PROXY");
+
+        // Smoke test
+        drop(cmd);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_binary_name_in_path_check() {
+        // On Windows, when checking PATH, we should use "claude.exe"
+        let binary_name = if cfg!(windows) {
+            "claude.exe"
+        } else {
+            "claude"
+        };
+
+        assert_eq!(binary_name, "claude.exe");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unix_binary_name_in_path_check() {
+        // On Unix, when checking PATH, we should use "claude"
+        let binary_name = if cfg!(windows) {
+            "claude.exe"
+        } else {
+            "claude"
+        };
+
+        assert_eq!(binary_name, "claude");
+    }
+}

@@ -482,10 +482,14 @@ pub async fn mcp_add_from_claude_desktop(
             .ok_or_else(|| "Could not find config directory".to_string())?
             .join("Claude")
             .join("claude_desktop_config.json")
+    } else if cfg!(target_os = "windows") {
+        // For Windows, Claude Desktop stores config in AppData\Roaming
+        dirs::config_dir()
+            .ok_or_else(|| "Could not find config directory".to_string())?
+            .join("Claude")
+            .join("claude_desktop_config.json")
     } else {
-        return Err(
-            "Import from Claude Desktop is only supported on macOS and Linux/WSL".to_string(),
-        );
+        return Err("Import from Claude Desktop is not supported on this platform".to_string());
     };
 
     // Check if config file exists
@@ -723,4 +727,171 @@ pub async fn mcp_save_project_config(
         .map_err(|e| format!("Failed to write .mcp.json: {}", e))?;
 
     Ok("Project MCP configuration saved".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_macos_claude_desktop_config_path() {
+        // Test that macOS uses the correct path structure
+        let home = dirs::home_dir().expect("Could not find home directory");
+        let expected_path = home
+            .join("Library")
+            .join("Application Support")
+            .join("Claude")
+            .join("claude_desktop_config.json");
+
+        // Verify path structure
+        let path_str = expected_path.to_string_lossy();
+        assert!(path_str.contains("Library/Application Support/Claude"));
+        assert!(path_str.ends_with("claude_desktop_config.json"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_linux_claude_desktop_config_path() {
+        // Test that Linux uses the correct path structure
+        let config_dir = dirs::config_dir().expect("Could not find config directory");
+        let expected_path = config_dir.join("Claude").join("claude_desktop_config.json");
+
+        // Verify path structure
+        let path_str = expected_path.to_string_lossy();
+        assert!(path_str.contains("Claude"));
+        assert!(path_str.ends_with("claude_desktop_config.json"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_windows_claude_desktop_config_path() {
+        // Test that Windows uses the correct path structure
+        let config_dir = dirs::config_dir().expect("Could not find config directory");
+        let expected_path = config_dir.join("Claude").join("claude_desktop_config.json");
+
+        // Verify path structure (AppData\Roaming\Claude on Windows)
+        let path_str = expected_path.to_string_lossy();
+        assert!(path_str.contains("Claude"));
+        assert!(path_str.ends_with("claude_desktop_config.json"));
+
+        // On Windows, config_dir() returns %APPDATA% (Roaming)
+        assert!(path_str.contains("Roaming") || path_str.contains("AppData"));
+    }
+
+    #[test]
+    fn test_mcp_server_config_serialization() {
+        let mut env = std::collections::HashMap::new();
+        env.insert("KEY".to_string(), "value".to_string());
+
+        let config = MCPServerConfig {
+            command: "node".to_string(),
+            args: vec!["server.js".to_string()],
+            env,
+        };
+
+        // Test that serialization works
+        let json = serde_json::to_string(&config);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("node"));
+        assert!(json_str.contains("server.js"));
+    }
+
+    #[test]
+    fn test_mcp_project_config_serialization() {
+        let mut servers = std::collections::HashMap::new();
+        servers.insert(
+            "test-server".to_string(),
+            MCPServerConfig {
+                command: "npx".to_string(),
+                args: vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-test".to_string(),
+                ],
+                env: std::collections::HashMap::new(),
+            },
+        );
+
+        let config = MCPProjectConfig {
+            mcp_servers: servers,
+        };
+
+        // Test that serialization works
+        let json = serde_json::to_string_pretty(&config);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("mcpServers"));
+        assert!(json_str.contains("test-server"));
+        assert!(json_str.contains("npx"));
+    }
+
+    #[test]
+    fn test_add_server_result_success() {
+        let result = AddServerResult {
+            success: true,
+            message: "Server added successfully".to_string(),
+            server_name: Some("test-server".to_string()),
+        };
+
+        assert!(result.success);
+        assert_eq!(result.message, "Server added successfully");
+        assert_eq!(result.server_name, Some("test-server".to_string()));
+    }
+
+    #[test]
+    fn test_add_server_result_failure() {
+        let result = AddServerResult {
+            success: false,
+            message: "Failed to add server".to_string(),
+            server_name: None,
+        };
+
+        assert!(!result.success);
+        assert_eq!(result.message, "Failed to add server");
+        assert!(result.server_name.is_none());
+    }
+
+    #[test]
+    fn test_import_server_result_success() {
+        let result = ImportServerResult {
+            name: "test-server".to_string(),
+            success: true,
+            error: None,
+        };
+
+        assert!(result.success);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_import_server_result_failure() {
+        let result = ImportServerResult {
+            name: "test-server".to_string(),
+            success: false,
+            error: Some("Connection failed".to_string()),
+        };
+
+        assert!(!result.success);
+        assert!(result.error.is_some());
+        assert_eq!(result.error.unwrap(), "Connection failed");
+    }
+
+    #[test]
+    fn test_platform_specific_paths() {
+        // Test that we use the correct environment variable for home directory
+        #[cfg(unix)]
+        {
+            let home = std::env::var("HOME");
+            assert!(home.is_ok() || cfg!(target_os = "android"));
+        }
+
+        #[cfg(windows)]
+        {
+            let userprofile = std::env::var("USERPROFILE");
+            assert!(userprofile.is_ok());
+        }
+    }
 }

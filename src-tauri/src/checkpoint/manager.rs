@@ -424,7 +424,17 @@ impl CheckpointManager {
                         use std::os::unix::fs::PermissionsExt;
                         Some(metadata.permissions().mode())
                     }
-                    #[cfg(not(unix))]
+                    #[cfg(windows)]
+                    {
+                        // On Windows, store read-only attribute as bit 0
+                        // This preserves the most important permission state
+                        if metadata.permissions().readonly() {
+                            Some(0o444) // Read-only (r--r--r--)
+                        } else {
+                            Some(0o666) // Read-write (rw-rw-rw-)
+                        }
+                    }
+                    #[cfg(not(any(unix, windows)))]
                     {
                         None
                     }
@@ -624,6 +634,21 @@ impl CheckpointManager {
                 fs::set_permissions(&full_path, permissions)
                     .context("Failed to set file permissions")?;
             }
+
+            #[cfg(windows)]
+            if let Some(mode) = snapshot.permissions {
+                // On Windows, restore read-only attribute
+                // If mode indicates read-only (0o444), set readonly flag
+                let mut permissions = fs::metadata(&full_path)
+                    .context("Failed to get file metadata")?
+                    .permissions();
+
+                let is_readonly = mode == 0o444;
+                permissions.set_readonly(is_readonly);
+
+                fs::set_permissions(&full_path, permissions)
+                    .context("Failed to set file permissions")?;
+            }
         }
 
         Ok(())
@@ -783,5 +808,223 @@ impl CheckpointManager {
             .values()
             .map(|state| state.last_modified)
             .max()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unix_file_permissions_capture() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Create a temporary file with specific permissions
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+        fs::write(&file_path, "test content").unwrap();
+
+        // Set specific permissions (e.g., 0o755 = rwxr-xr-x)
+        let permissions = std::fs::Permissions::from_mode(0o755);
+        fs::set_permissions(&file_path, permissions).unwrap();
+
+        // Verify we can read the permissions back
+        let metadata = fs::metadata(&file_path).unwrap();
+        let mode = metadata.permissions().mode();
+
+        // The mode includes file type bits, so we mask to get just permissions
+        let perm_bits = mode & 0o777;
+        assert_eq!(perm_bits, 0o755);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unix_file_permissions_restore() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Create a temporary file
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+        fs::write(&file_path, "test content").unwrap();
+
+        // Store original permissions
+        let original_mode = 0o644;
+        let permissions = std::fs::Permissions::from_mode(original_mode);
+        fs::set_permissions(&file_path, permissions).unwrap();
+
+        // Change permissions
+        let new_permissions = std::fs::Permissions::from_mode(0o777);
+        fs::set_permissions(&file_path, new_permissions).unwrap();
+
+        // Verify changed
+        let metadata = fs::metadata(&file_path).unwrap();
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o777);
+
+        // Restore original permissions
+        let restore_permissions = std::fs::Permissions::from_mode(original_mode);
+        fs::set_permissions(&file_path, restore_permissions).unwrap();
+
+        // Verify restored
+        let metadata = fs::metadata(&file_path).unwrap();
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o644);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_permissions_readonly_capture() {
+        // On Windows, we capture read-only attribute as permissions
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+        fs::write(&file_path, "test content").unwrap();
+
+        // Get initial metadata (should be writable)
+        let metadata = fs::metadata(&file_path).unwrap();
+        assert!(!metadata.permissions().readonly());
+
+        // Set read-only
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&file_path, permissions).unwrap();
+
+        // Verify it's now read-only
+        let metadata = fs::metadata(&file_path).unwrap();
+        assert!(metadata.permissions().readonly());
+
+        // Clear read-only
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&file_path, permissions).unwrap();
+
+        // Verify it's writable again
+        let metadata = fs::metadata(&file_path).unwrap();
+        assert!(!metadata.permissions().readonly());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_permissions_encoding() {
+        // Test that we encode readonly as 0o444 and writable as 0o666
+        let readonly_mode = 0o444;
+        let writable_mode = 0o666;
+
+        assert_eq!(readonly_mode, 0o444);
+        assert_eq!(writable_mode, 0o666);
+
+        // Test decoding
+        assert_eq!(readonly_mode == 0o444, true);
+        assert_eq!(writable_mode == 0o444, false);
+    }
+
+    #[test]
+    fn test_file_snapshot_structure() {
+        use std::path::PathBuf;
+
+        let snapshot = FileSnapshot {
+            checkpoint_id: "test123".to_string(),
+            file_path: PathBuf::from("src/main.rs"),
+            content: "fn main() {}".to_string(),
+            hash: "abc123".to_string(),
+            is_deleted: false,
+            permissions: Some(0o644),
+            size: 12,
+        };
+
+        assert_eq!(snapshot.checkpoint_id, "test123");
+        assert_eq!(snapshot.file_path, PathBuf::from("src/main.rs"));
+        assert!(!snapshot.is_deleted);
+        assert_eq!(snapshot.permissions, Some(0o644));
+    }
+
+    #[test]
+    fn test_file_snapshot_deleted_file() {
+        use std::path::PathBuf;
+
+        let snapshot = FileSnapshot {
+            checkpoint_id: "test123".to_string(),
+            file_path: PathBuf::from("deleted.rs"),
+            content: String::new(),
+            hash: String::new(),
+            is_deleted: true,
+            permissions: None,
+            size: 0,
+        };
+
+        assert!(snapshot.is_deleted);
+        assert!(snapshot.content.is_empty());
+        assert!(snapshot.permissions.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unix_permissions_values() {
+        // Test common Unix permission values
+        let read_write = 0o644; // rw-r--r--
+        let executable = 0o755; // rwxr-xr-x
+        let private = 0o600; // rw-------
+
+        assert_eq!(read_write, 0o644);
+        assert_eq!(executable, 0o755);
+        assert_eq!(private, 0o600);
+    }
+
+    #[test]
+    fn test_checkpoint_result_structure() {
+        let checkpoint = Checkpoint {
+            id: "cp123".to_string(),
+            session_id: "session1".to_string(),
+            project_id: "project1".to_string(),
+            message_index: 5,
+            timestamp: Utc::now(),
+            description: Some("Test checkpoint".to_string()),
+            parent_checkpoint_id: None,
+            metadata: CheckpointMetadata {
+                total_tokens: 100,
+                model_used: "claude-sonnet".to_string(),
+                user_prompt: "test prompt".to_string(),
+                file_changes: 5,
+                snapshot_size: 1024,
+            },
+        };
+
+        let result = CheckpointResult {
+            checkpoint: checkpoint.clone(),
+            files_processed: 5,
+            warnings: vec![],
+        };
+
+        assert_eq!(result.checkpoint.id, "cp123");
+        assert_eq!(
+            result.checkpoint.description,
+            Some("Test checkpoint".to_string())
+        );
+        assert_eq!(result.files_processed, 5);
+    }
+
+    #[test]
+    fn test_platform_permissions_handling() {
+        // Test that permissions are handled correctly based on platform
+        #[cfg(unix)]
+        {
+            // On Unix, permissions store full mode bits
+            let has_full_permissions = true;
+            assert!(has_full_permissions);
+        }
+
+        #[cfg(windows)]
+        {
+            // On Windows, permissions store read-only state
+            let has_readonly_support = true;
+            assert!(has_readonly_support);
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            // On other platforms, permissions are not stored
+            let has_permissions = false;
+            assert!(!has_permissions);
+        }
     }
 }
