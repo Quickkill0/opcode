@@ -4,6 +4,8 @@
 mod checkpoint;
 mod claude_binary;
 mod commands;
+mod permission_server;
+mod permission_storage;
 mod process;
 
 use checkpoint::state::CheckpointState;
