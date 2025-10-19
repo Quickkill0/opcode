@@ -16,7 +16,11 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "build:dmg": "tauri build --bundles dmg",
-    "check": "tsc --noEmit && cd src-tauri && cargo check"
+    "check": "tsc --noEmit && cd src-tauri && cargo check",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -64,14 +68,21 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.7.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.15.30",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@types/sharp": "^0.32.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/ui": "^3.2.4",
+    "happy-dom": "^20.0.5",
+    "jsdom": "^27.0.1",
     "sharp": "^0.34.2",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^3.2.4"
   },
   "trustedDependencies": [
     "@parcel/watcher",
