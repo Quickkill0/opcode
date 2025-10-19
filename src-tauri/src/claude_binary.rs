@@ -222,12 +222,31 @@ fn try_which_command() -> Option<ClaudeInstallation> {
                 return None;
             }
 
-            // On Windows, `where` can return multiple paths, newline-separated. We take the first one.
-            let path = output_str.lines().next().unwrap_or("").trim().to_string();
+            // On Windows, `where` can return multiple paths, newline-separated.
+            // Prefer .cmd/.bat files over files without extensions
+            let mut best_path = None;
+            for line in output_str.lines() {
+                let path = line.trim().to_string();
+                if path.is_empty() {
+                    continue;
+                }
 
-            if path.is_empty() {
-                return None;
+                // Prefer paths with .cmd or .bat extensions
+                if path.ends_with(".cmd") || path.ends_with(".bat") {
+                    best_path = Some(path);
+                    break;
+                }
+
+                // Fallback to first path if no .cmd/.bat found
+                if best_path.is_none() {
+                    best_path = Some(path);
+                }
             }
+
+            let path = match best_path {
+                Some(p) => p,
+                None => return None,
+            };
 
             debug!("'where' found claude at: {}", path);
 
