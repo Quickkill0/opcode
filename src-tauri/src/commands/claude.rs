@@ -932,11 +932,6 @@ pub async fn execute_claude_code(
 
     let claude_path = find_claude_binary(&app)?;
 
-    // Emit diagnostic info to frontend
-    let _ = app.emit("claude-error", &format!("DEBUG: Using Claude binary at: {}", claude_path));
-    let _ = app.emit("claude-error", &format!("DEBUG: Project path: {}", project_path));
-    let _ = app.emit("claude-error", &format!("DEBUG: Prompt: {}", prompt));
-
     let args = vec![
         "-p".to_string(),
         prompt.clone(),
@@ -948,20 +943,8 @@ pub async fn execute_claude_code(
         "--dangerously-skip-permissions".to_string(),
     ];
 
-    let _ = app.emit("claude-error", &format!("DEBUG: Args: {:?}", args));
-
     let cmd = create_system_command(&claude_path, args, &project_path);
-
-    let _ = app.emit("claude-error", "DEBUG: About to spawn process...");
-    let result = spawn_claude_process(app.clone(), cmd, prompt, model, project_path).await;
-
-    if let Err(ref e) = result {
-        let _ = app.emit("claude-error", &format!("DEBUG: Spawn failed with error: {}", e));
-    } else {
-        let _ = app.emit("claude-error", "DEBUG: Spawn succeeded!");
-    }
-
-    result
+    spawn_claude_process(app, cmd, prompt, model, project_path).await
 }
 
 /// Continue an existing Claude Code conversation with streaming output
