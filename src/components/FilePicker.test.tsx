@@ -16,8 +16,8 @@ describe('FilePicker Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.listDirectoryContents).mockResolvedValue([
-      { name: 'folder1', path: 'C:\\test\\folder1', is_directory: true, size: 0, modified: '' },
-      { name: 'file1.txt', path: 'C:\\test\\file1.txt', is_directory: false, size: 1024, modified: '' },
+      { name: 'folder1', path: 'C:\\test\\folder1', is_directory: true, size: 0 },
+      { name: 'file1.txt', path: 'C:\\test\\file1.txt', is_directory: false, size: 1024 },
     ]);
   });
 
