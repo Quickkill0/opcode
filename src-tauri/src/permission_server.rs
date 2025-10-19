@@ -34,50 +34,7 @@ pub struct PermissionServerState {
 /// Match a pattern against a request pattern
 /// Supports wildcards: * matches anything except /, ** matches everything including /
 pub fn match_pattern(pattern: &str, request: &str) -> bool {
-    // Extract tool name from pattern and request
-    let (pattern_tool, pattern_path) = match pattern.split_once('(') {
-        Some((tool, rest)) => (tool, rest.trim_end_matches(')')),
-        None => return false,
-    };
-
-    let (request_tool, request_path) = match request.split_once('(') {
-        Some((tool, rest)) => (tool, rest.trim_end_matches(')')),
-        None => return false,
-    };
-
-    // Tool names must match exactly (case-sensitive)
-    if pattern_tool != request_tool {
-        return false;
-    }
-
-    // If pattern is exact match, return true
-    if pattern_path == request_path {
-        return true;
-    }
-
-    // Convert glob pattern to regex
-    // ** matches everything including /
-    // * matches anything except /
-    let regex_pattern = pattern_path
-        .replace("\\", "\\\\")  // Escape backslashes
-        .replace(".", "\\.")     // Escape dots
-        .replace("(", "\\(")     // Escape parens
-        .replace(")", "\\)")
-        .replace("[", "\\[")     // Escape brackets
-        .replace("]", "\\]")
-        .replace("$", "\\$")     // Escape dollar signs
-        .replace("**", "<!DOUBLE_STAR!>") // Temporarily replace ** with placeholder
-        .replace("*", "[^/]*")   // * matches anything except /
-        .replace("<!DOUBLE_STAR!>", ".*"); // ** matches everything
-
-    // Anchor the regex to match the entire string
-    let regex_pattern = format!("^{}$", regex_pattern);
-
-    // Try to compile and match the regex
-    match regex::Regex::new(&regex_pattern) {
-        Ok(re) => re.is_match(request_path),
-        Err(_) => false,
-    }
+    todo!("Implement wildcard pattern matching")
 }
 
 pub async fn start_permission_server(app: AppHandle, port: u16) -> Result<(), String> {

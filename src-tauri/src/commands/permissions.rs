@@ -1,5 +1,5 @@
 use tauri::{command, State};
-use crate::permission_server::{PermissionServerState, PermissionDecision};
+use crate::permission_server::PermissionServerState;
 use crate::permission_storage::PermissionStorage;
 
 #[command]
@@ -13,45 +13,27 @@ pub async fn respond_to_permission(
     path: String,
     input: Option<serde_json::Value>,
 ) -> Result<(), String> {
-    // Save to ~/.claude/settings.local.json if user chose "remember"
-    if always_allow {
-        let pattern = PermissionStorage::format_pattern(&tool, &path, input.as_ref());
-        PermissionStorage::add_allow_rule(pattern)?;
-    } else if always_deny {
-        let pattern = PermissionStorage::format_pattern(&tool, &path, input.as_ref());
-        PermissionStorage::add_deny_rule(pattern)?;
-    }
-
-    // Respond to the waiting HTTP request
-    let mut pending = state.pending_requests.write().await;
-    if let Some(tx) = pending.remove(&request_id) {
-        let decision = PermissionDecision {
-            decision: if allowed { "approve" } else { "deny" }.to_string(),
-        };
-        let _ = tx.send(decision);
-    }
-
-    Ok(())
+    todo!("Implement respond_to_permission command")
 }
 
 #[command]
 pub fn get_permission_rules() -> Result<crate::permission_storage::PermissionRules, String> {
-    PermissionStorage::load_permissions()
+    todo!("Implement get_permission_rules command")
 }
 
 #[command]
 pub fn add_permission_allow_rule(pattern: String) -> Result<(), String> {
-    PermissionStorage::add_allow_rule(pattern)
+    todo!("Implement add_permission_allow_rule command")
 }
 
 #[command]
 pub fn add_permission_deny_rule(pattern: String) -> Result<(), String> {
-    PermissionStorage::add_deny_rule(pattern)
+    todo!("Implement add_permission_deny_rule command")
 }
 
 #[command]
 pub fn remove_permission_rule(pattern: String) -> Result<(), String> {
-    PermissionStorage::remove_rule(pattern)
+    todo!("Implement remove_permission_rule command")
 }
 
 #[cfg(test)]

@@ -19,161 +19,35 @@ pub struct PermissionRules {
 pub struct PermissionStorage;
 
 impl PermissionStorage {
-    /// Get the path to settings.local.json
-    fn get_settings_path() -> Result<PathBuf, String> {
-        dirs::home_dir()
-            .ok_or_else(|| "Could not find home directory".to_string())
-            .map(|home| home.join(".claude").join("settings.local.json"))
-    }
-
     /// Format a permission pattern for storage
     /// Examples:
     /// - Bash: format_pattern("Bash", "git push", Some(...)) -> "Bash(git *)"
     /// - Read: format_pattern("Read", "~/.zshrc", None) -> "Read(~/.zshrc)"
     /// - Write: format_pattern("Write", "src/main.rs", None) -> "Write(src/**)"
     pub fn format_pattern(tool: &str, path: &str, input: Option<&serde_json::Value>) -> String {
-        match tool {
-            "Bash" => {
-                // For Bash, extract base command from input
-                if let Some(input_val) = input {
-                    if let Some(command) = input_val.get("command").and_then(|v| v.as_str()) {
-                        let base_cmd = command.split_whitespace().next().unwrap_or(command);
-                        format!("Bash({} *)", base_cmd)
-                    } else {
-                        format!("Bash({})", path)
-                    }
-                } else {
-                    format!("Bash({})", path)
-                }
-            }
-            "Read" | "Write" | "Edit" | "Glob" | "Grep" => {
-                // For file operations, add ** if it's a specific file
-                if path.contains('*') {
-                    // Already has wildcards, use as-is
-                    format!("{}({})", tool, path)
-                } else if path.starts_with("~/") || path.starts_with('/') || path.starts_with("C:\\") || path.starts_with("D:\\") {
-                    // Absolute paths or home paths - use as-is if they're specific files
-                    format!("{}({})", tool, path)
-                } else if path.contains('.') && !path.ends_with('/') {
-                    // Specific file in a relative path, add ** to parent directory
-                    let parent = std::path::Path::new(path)
-                        .parent()
-                        .and_then(|p| p.to_str())
-                        .unwrap_or(path);
-                    format!("{}({}/**)", tool, parent)
-                } else {
-                    // Directory or other pattern, use as-is
-                    format!("{}({})", tool, path)
-                }
-            }
-            _ => format!("{}({})", tool, path)
-        }
+        todo!("Implement pattern formatting")
     }
 
     pub fn load_permissions() -> Result<PermissionRules, String> {
-        let settings_path = Self::get_settings_path()?;
-
-        if !settings_path.exists() {
-            // Return empty rules if file doesn't exist
-            return Ok(PermissionRules::default());
-        }
-
-        let content = fs::read_to_string(&settings_path)
-            .map_err(|e| format!("Failed to read settings file: {}", e))?;
-
-        let settings: PermissionSettings = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse settings file: {}", e))?;
-
-        Ok(settings.permissions)
+        todo!("Implement loading permissions from ~/.claude/settings.local.json")
     }
 
     pub fn add_allow_rule(pattern: String) -> Result<(), String> {
-        let settings_path = Self::get_settings_path()?;
-
-        // Ensure .claude directory exists
-        if let Some(parent) = settings_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create .claude directory: {}", e))?;
-        }
-
-        let mut rules = Self::load_permissions().unwrap_or_default();
-
-        if !rules.allow.contains(&pattern) {
-            rules.allow.push(pattern);
-        }
-
-        let settings = PermissionSettings { permissions: rules };
-        let content = serde_json::to_string_pretty(&settings)
-            .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-
-        fs::write(&settings_path, content)
-            .map_err(|e| format!("Failed to write settings file: {}", e))?;
-
-        Ok(())
+        todo!("Implement adding allow rule to settings.local.json")
     }
 
     pub fn add_deny_rule(pattern: String) -> Result<(), String> {
-        let settings_path = Self::get_settings_path()?;
-
-        // Ensure .claude directory exists
-        if let Some(parent) = settings_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create .claude directory: {}", e))?;
-        }
-
-        let mut rules = Self::load_permissions().unwrap_or_default();
-
-        if !rules.deny.contains(&pattern) {
-            rules.deny.push(pattern);
-        }
-
-        let settings = PermissionSettings { permissions: rules };
-        let content = serde_json::to_string_pretty(&settings)
-            .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-
-        fs::write(&settings_path, content)
-            .map_err(|e| format!("Failed to write settings file: {}", e))?;
-
-        Ok(())
+        todo!("Implement adding deny rule to settings.local.json")
     }
 
     pub fn remove_rule(pattern: String) -> Result<(), String> {
-        let settings_path = Self::get_settings_path()?;
-
-        let mut rules = Self::load_permissions().unwrap_or_default();
-
-        // Remove from both allow and deny lists
-        rules.allow.retain(|p| p != &pattern);
-        rules.deny.retain(|p| p != &pattern);
-
-        let settings = PermissionSettings { permissions: rules };
-        let content = serde_json::to_string_pretty(&settings)
-            .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-
-        fs::write(&settings_path, content)
-            .map_err(|e| format!("Failed to write settings file: {}", e))?;
-
-        Ok(())
+        todo!("Implement removing rule from settings.local.json")
     }
 
     /// Generate hook configuration JSON for --settings flag
     /// This is passed at runtime and NOT saved to disk
     pub fn generate_hook_settings(hook_path: &str, port: u16) -> Result<String, String> {
-        let settings = serde_json::json!({
-            "hooks": {
-                "PreToolUse": [{
-                    "matcher": "*",
-                    "hooks": [{
-                        "type": "command",
-                        "command": format!("python {} {}", hook_path, port),
-                        "timeout": 300
-                    }]
-                }]
-            }
-        });
-
-        serde_json::to_string(&settings)
-            .map_err(|e| format!("Failed to serialize hook settings: {}", e))
+        todo!("Implement hook settings generation")
     }
 }
 
@@ -223,16 +97,7 @@ mod tests {
 
     #[test]
     fn test_load_permissions_empty_file() {
-        // Clear any existing rules first
-        let existing_rules = PermissionStorage::load_permissions().unwrap_or_default();
-        for rule in existing_rules.allow {
-            let _ = PermissionStorage::remove_rule(rule);
-        }
-        for rule in existing_rules.deny {
-            let _ = PermissionStorage::remove_rule(rule);
-        }
-
-        // Now test loading empty permissions
+        // This test will need a temp directory
         let result = PermissionStorage::load_permissions();
         assert!(result.is_ok());
         let rules = result.unwrap();
