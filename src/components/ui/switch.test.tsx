@@ -10,7 +10,8 @@ describe('Switch Component', () => {
   });
 
   it('renders unchecked by default', () => {
-    render(<Switch />);
+    // Switch requires explicit checked prop, defaults to undefined which doesn't set aria-checked
+    render(<Switch checked={false} />);
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
   });
 

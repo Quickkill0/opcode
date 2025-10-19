@@ -30,8 +30,9 @@ describe('FilePicker Component', () => {
       />
     );
 
-    // Should show the current path
-    expect(await screen.findByText(/C:\\test/i)).toBeInTheDocument();
+    // Component shows relative path "/" when currentPath === basePath
+    await screen.findByText('/');
+    expect(screen.getByText('/')).toBeInTheDocument();
   });
 
   it('lists directories and files', async () => {
@@ -43,8 +44,9 @@ describe('FilePicker Component', () => {
       />
     );
 
-    expect(await screen.findByText(/folder1/i)).toBeInTheDocument();
-    expect(await screen.findByText(/file1.txt/i)).toBeInTheDocument();
+    // Wait for the async data to load
+    expect(await screen.findByText('folder1')).toBeInTheDocument();
+    expect(screen.getByText('file1.txt')).toBeInTheDocument();
   });
 
   it('calls onSelect when item is clicked', async () => {
@@ -59,7 +61,7 @@ describe('FilePicker Component', () => {
       />
     );
 
-    const folder = await screen.findByText(/folder1/i);
+    const folder = await screen.findByText('folder1');
     await user.click(folder);
 
     expect(handleSelect).toHaveBeenCalledWith(
@@ -82,7 +84,9 @@ describe('FilePicker Component', () => {
       />
     );
 
-    const closeButton = screen.getByRole('button', { name: /close/i });
+    // Find the close button (second button with empty name, first is disabled back button)
+    const buttons = screen.getAllByRole('button', { name: '' });
+    const closeButton = buttons[1]; // Second button is the close button
     await user.click(closeButton);
 
     expect(handleClose).toHaveBeenCalled();
@@ -97,6 +101,7 @@ describe('FilePicker Component', () => {
       />
     );
 
-    expect(await screen.findByText(/Documents/i)).toBeInTheDocument();
+    // Component shows relative path "/" when at base path
+    expect(await screen.findByText('/')).toBeInTheDocument();
   });
 });

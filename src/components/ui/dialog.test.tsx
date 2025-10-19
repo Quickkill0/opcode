@@ -31,7 +31,8 @@ describe('Dialog Component', () => {
     await user.click(screen.getByText(/open dialog/i));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText(/test dialog/i)).toBeInTheDocument();
+    // Multiple elements contain "test dialog" (title and description), use getAllByText
+    expect(screen.getAllByText(/test dialog/i)[0]).toBeInTheDocument();
   });
 
   it('closes dialog when close button is clicked', async () => {
